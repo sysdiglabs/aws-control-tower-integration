@@ -2,6 +2,12 @@
 
 This repo provide example of integration for Sysdig CloudConnector (Real-Time Threat Investigation based on CloudTrail) inside AWS Control Tower environment
 
+## Architecture
+
+![Architecture Diagram](Sysdig-CT-Arch-diagram.png)
+
+This solution utilize existing AWS Control Tower infrastructure and centralized the CloudTrail log collection in the `log archive` account. CloudTrail logs from existing linked accounts and future vending accounts is automatically ingested.
+
 ## Getting Started 
 
 Run the following command on your AWS Control Tower management account (requires Admin privilege)
