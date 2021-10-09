@@ -48,3 +48,14 @@ Example of the `params.json`:
   }
 ]
 ```
+
+## Build
+
+To build this solution:
+- git clone `https://github.com/wellsiau-aws/sysdig-ct-integration.git`
+- Locate the `Makefile` in the root directory
+- Update the `BUCKET_PREFIX` with your own S3 bucket (require public read)
+- Run `make build`
+- Run `make upload`
+- Launch the onboarding stack: `aws cloudformation create-stack --stack-name Sysdig-CT --template-url https://wellsiau-quickstart.s3.amazonaws.com/sysdig/templates/sysdig_ct_onboarding.yaml --parameters file://params.json --capabilities CAPABILITY_NAMED_IAM`
+- See reference to `params.json` in the getting started section
