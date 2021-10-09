@@ -1,0 +1,360 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: AWS Control Tower customization that adds in Sysdig Secure integration to your landing zone.
+Metadata:
+  QuickStartDocumentation:
+    EntrypointName: "Parameters for deploying Sysdig Secure AWS Control Tower integration"
+  AWS::CloudFormation::Interface: 
+    ParameterGroups:
+      - Label:
+          default: "Sysdig Secure configuration"
+        Parameters:
+          - SysdigSecureEndpoint
+          - SysdigSecureAPIToken
+      - Label:
+          default: "Deployment configuration"
+        Parameters:
+          - StackSetName
+          - StackSetUrl
+          - AuditAccount
+          - LogArchiveAccount
+      - Label:
+          default: "Source configuration"
+        Parameters:
+          - QSS3BucketName
+          - QSS3KeyPrefix
+    ParameterLabels:
+      SysdigSecureEndpoint:
+        default: Sysdig Secure Endpoint
+      SysdigSecureAPIToken:
+        default: Sysdig Secure API Token
+      StackSetName:
+        default: StackSet name.
+      StackSetUrl:
+        default: StackSet template URL.
+      QSS3BucketName:
+        default: Source S3 bucket name.
+      QSS3KeyPrefix:
+        default: Source S3 key prefix.
+      AuditAccount:
+        default: AWS Control Tower Audit Account id
+      LogArchiveAccount:
+        default: AWS Control Tower Log Archive Account id
+Parameters:
+  SysdigSecureEndpoint:
+    Type: String
+    Description: Sysdig Secure Endpoint URL, if your Sysdig Secure platform is installed in another region, use that endpoint.
+    Default: 'https://secure.sysdig.com'
+    AllowedValues:
+      - 'https://secure.sysdig.com'
+      - 'https://us2.app.sysdig.com'
+      - 'https://eu1.app.sysdig.com'
+  SysdigSecureAPIToken:
+    Type: String
+    NoEcho: true
+    AllowedPattern: '^([A-Za-z0-9-]){36}$'
+    ConstraintDescription: Sysdig Secure API Token is 36 alphanumeric long.
+    Description: Sysdig Secure API Token. See https://docs.sysdig.com/en/docs/developer-tools/sysdig-python-client/getting-started-with-sdcclient/#retrieve-the-sysdig-api-token
+  StackSetName:
+    Type: String
+    Description: Sysdig Secure CloudConnector StackSet Name
+    Default: Sysdig-Secure-CT
+  StackSetUrl:
+    Type: String
+    Default: https://wellsiau-quickstart.s3.amazonaws.com/sysdig/templates/sysdig_ct_stackset.yaml
+    Description: Sysdig Secure CloudConnector StackSet template URL
+  AuditAccount:
+    Type: String
+    Description: AWS Control Tower Audit account id
+    AllowedPattern: '[0-9]{12}$'
+    ConstraintDescription: AWS account ID contains only 12 digits numbers
+  LogArchiveAccount:
+    Type: String
+    Description: AWS Control Tower Log Archive account id
+    AllowedPattern: '[0-9]{12}$'
+    ConstraintDescription: AWS account ID contains only 12 digits numbers
+  QSS3BucketName:
+    Type: String
+    Default: wellsiau-aws
+    Description: "S3 bucket for all assets. Use this if you want to customize your deployment. The bucket name can include numbers, lowercase letters, uppercase letters, and hyphens, but it cannot start or end with hyphens (-)."
+  QSS3KeyPrefix:
+    Type: String
+    Default: sysdig/
+    Description: "S3 key prefix to simulate a directory for all assets. Use this if you want to customize your deployment. The prefix can include numbers, lowercase letters, uppercase letters, hyphens (-), and forward slashes (/). For more information, see https://docs.aws.amazon.com/AmazonS3/latest/dev/UsingMetadata.html."
+
+Mappings: 
+  SourceCode:
+    Key:
+      Onboarding: "functions/packages/onboarding/SysdigCTOnboarding.zip"
+  IAM:
+    Role:
+      AuditAccount: "AWSControlTowerExecution"
+  
+Resources:
+  LambdaZipsBucket:
+    Type: AWS::S3::Bucket
+
+  CopyZips:
+    Type: Custom::CopyZips
+    Properties:
+      ServiceToken: !GetAtt 'CopyZipsFunction.Arn'
+      DestBucket: !Ref 'LambdaZipsBucket'
+      SourceBucket: !Ref 'QSS3BucketName'
+      Prefix: !Ref 'QSS3KeyPrefix'
+      Objects:
+        - !FindInMap ["SourceCode", "Key", "Onboarding"]
+
+  CopyZipsRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - !Sub 'arn:${AWS::Partition}:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole'
+      Path: /
+      Policies:
+        - PolicyName: lambda-copier
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:GetObjectTagging
+                Resource:
+                  - !Sub 'arn:${AWS::Partition}:s3:::${QSS3BucketName}/${QSS3KeyPrefix}*'
+              - Effect: Allow
+                Action:
+                  - s3:PutObject
+                  - s3:DeleteObject
+                  - s3:PutObjectTagging
+                Resource:
+                  - !Sub 'arn:${AWS::Partition}:s3:::${LambdaZipsBucket}/${QSS3KeyPrefix}*'
+
+  CopyZipsFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      Description: Copies objects from the S3 bucket to a new location.
+      Handler: index.handler
+      Runtime: python3.7
+      Role: !GetAtt 'CopyZipsRole.Arn'
+      Timeout: 240
+      Code:
+        ZipFile: |
+          import json
+          import logging
+          import threading
+          import boto3
+          import cfnresponse
+          def copy_objects(source_bucket, dest_bucket, prefix, objects):
+              s3 = boto3.client('s3')
+              for o in objects:
+                  key = prefix + o
+                  copy_source = {
+                      'Bucket': source_bucket,
+                      'Key': key
+                  }
+                  print('copy_source: %s' % copy_source)
+                  print('dest_bucket = %s'%dest_bucket)
+                  print('key = %s' %key)
+                  s3.copy_object(CopySource=copy_source, Bucket=dest_bucket,
+                        Key=key)
+          def delete_objects(bucket, prefix, objects):
+              s3 = boto3.client('s3')
+              objects = {'Objects': [{'Key': prefix + o} for o in objects]}
+              s3.delete_objects(Bucket=bucket, Delete=objects)
+          def timeout(event, context):
+              logging.error('Execution is about to time out, sending failure response to CloudFormation')
+              cfnresponse.send(event, context, cfnresponse.FAILED, {}, None)
+          def handler(event, context):
+              # make sure we send a failure to CloudFormation if the function
+              # is going to timeout
+              timer = threading.Timer((context.get_remaining_time_in_millis()
+                        / 1000.00) - 0.5, timeout, args=[event, context])
+              timer.start()
+              print('Received event: %s' % json.dumps(event))
+              status = cfnresponse.SUCCESS
+              try:
+                  source_bucket = event['ResourceProperties']['SourceBucket']
+                  dest_bucket = event['ResourceProperties']['DestBucket']
+                  prefix = event['ResourceProperties']['Prefix']
+                  objects = event['ResourceProperties']['Objects']
+                  if event['RequestType'] == 'Delete':
+                      delete_objects(dest_bucket, prefix, objects)
+                  else:
+                      copy_objects(source_bucket, dest_bucket, prefix, objects)
+              except Exception as e:
+                  logging.error('Exception: %s' % e, exc_info=True)
+                  status = cfnresponse.FAILED
+              finally:
+                  timer.cancel()
+                  cfnresponse.send(event, context, status, {}, None)
+
+  SysdigOnboardingFunction:
+    Type: AWS::Lambda::Function
+    DependsOn: 
+      - CopyZips
+      - SysdigOnboardingSNS
+    Properties:
+      Code:
+        S3Bucket: !Ref LambdaZipsBucket
+        S3Key: !Join ['', [!Ref 'QSS3KeyPrefix', !FindInMap ["SourceCode", "Key", "Onboarding"]]]
+      Handler: sysdig_ct_onboarding.lambda_handler
+      Runtime: python3.8
+      Timeout: 600
+      Environment:
+        Variables:
+          stackSetName: !Ref StackSetName
+          stackSetUrl: !Ref StackSetUrl
+          sysdigSecureEndpoint: !Ref SysdigSecureEndpoint
+          sysdigSecureSecret: !Ref SysdigSecret
+          callbackSNS: !Ref SysdigOnboardingSNS
+      Role: !GetAtt SysdigOnboardingFunctionRole.Arn
+
+  SysdigOnboardingFunctionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service: lambda.amazonaws.com
+          Action: sts:AssumeRole
+      Path: /
+      Policies:
+      - PolicyName: Onboarding_Operations
+        PolicyDocument:
+          Version: 2012-10-17
+          Statement:
+          - Sid: SecretRead
+            Effect: Allow
+            Action:
+            - secretsmanager:GetSecretValue
+            Resource:
+              Ref: SysdigSecret
+          - Sid: StackSetInstanceCreate
+            Effect: Allow
+            Action:
+            - cloudformation:CreateStackInstances
+            - cloudformation:ListStackInstances
+            - cloudformation:ListStackSetOperations
+            Resource:
+              !Join ['', ['arn:aws:cloudformation:', !Ref 'AWS::Region', ':', !Ref 'AWS::AccountId', ':stackset/', !Ref StackSetName, '*' ]]
+          - Sid: StackSetInstanceDelete
+            Effect: Allow
+            Action:
+            - cloudformation:DeleteStackSet
+            - cloudformation:DeleteStackInstances
+            - cloudformation:DescribeStackSetOperation
+            Resource:
+              !Join ['', ['arn:aws:cloudformation:', !Ref 'AWS::Region', ':', !Ref 'AWS::AccountId', ':stackset/', !Ref StackSetName, '*' ]]
+          - Sid: StackSetCreate
+            Effect: Allow
+            Action:
+            - cloudformation:CreateStackSet
+            - cloudformation:DescribeStackSet
+            Resource:
+              !Join ['', ['arn:aws:cloudformation:', '*', ':', '*', ':stackset/', !Ref StackSetName, '*' ]]
+          - Sid: S3Operations
+            Effect: Allow
+            Action:
+            - s3:ListBucket
+            - s3:GetObject
+            Resource: 
+            - !Join ['',['arn:aws:s3:::', !Ref QSS3BucketName, '/', !Ref QSS3KeyPrefix, '*']]
+          - Sid: PassRole
+            Effect: Allow
+            Action:
+            - iam:PassRole
+            Resource: !Join [':', ['arn:aws:iam:', !Ref 'AWS::AccountId', 'role/service-role/AWSControlTowerStackSetRole' ]]
+          - Sid: AuditAccountOperations
+            Effect: Allow
+            Action:
+            - sts:AssumeRole
+            Resource:
+            - !Join ['', ['arn:aws:iam::', !Ref AuditAccount, ':role/', !FindInMap [IAM,Role, AuditAccount]]]
+          - Sid: ControlTowerConfigDiscovery
+            Effect: Allow
+            Action:
+            - cloudformation:DescribeStackSet
+            Resource:
+              !Join ['', ['arn:aws:cloudformation:', !Ref 'AWS::Region', ':', !Ref 'AWS::AccountId', ':stackset/', 'AWSControlTowerBP-BASELINE-CLOUDTRAIL', '*' ]]
+          - Sid: ControlTowerCTKMSOperations
+            Effect: Allow
+            Action:
+            - kms:GetKeyPolicy
+            - kms:PutKeyPolicy
+            Resource:
+              !Join ['', ['arn:aws:kms:', !Ref 'AWS::Region', ':', !Ref 'AWS::AccountId', ':key/*' ]]
+          
+      ManagedPolicyArns:
+      - !Sub 'arn:${AWS::Partition}:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole'
+
+  SysdigOnboardingFirstLaunch:
+    Type: AWS::CloudFormation::CustomResource
+    Properties:
+      ServiceToken:
+        !GetAtt SysdigOnboardingFunction.Arn
+  
+  SysdigOnboardingSNS:
+    Type: AWS::SNS::Topic
+
+  SysdigOnboardingSNSLambdaPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !GetAtt SysdigOnboardingFunction.Arn
+      Principal: sns.amazonaws.com
+      SourceArn: !Ref SysdigOnboardingSNS
+
+  SysdigOnboardingSNSSubscription:
+    Type: AWS::SNS::Subscription
+    Properties:
+      Endpoint: !GetAtt SysdigOnboardingFunction.Arn
+      Protocol: lambda
+      TopicArn: !Ref SysdigOnboardingSNS
+
+  SysdigOnboardingSNSTopicPolicy:
+    Type: AWS::SNS::TopicPolicy
+    Properties:
+      Topics: [!Ref SysdigOnboardingSNS]
+      PolicyDocument:
+        Version: '2012-10-17'
+        Id: '__default_policy_ID'
+        Statement:
+        - Sid: grant-publish
+          Effect: Allow
+          Principal:
+            AWS: !Ref LogArchiveAccount
+          Resource: !Ref SysdigOnboardingSNS
+          Action:
+            - SNS:Publish
+        - Sid: grant-receive
+          Effect: Allow
+          Principal:
+            Service: 'lambda.amazonaws.com'
+          Resource: !Ref SysdigOnboardingSNS
+          Action:
+            - SNS:Subscribe
+            - SNS:Receive
+          Condition:
+            StringEquals:
+              AWS:SourceOwner: !Sub '${AWS::AccountId}'
+            ArnLike:
+              aws:SourceArn: !GetAtt SysdigOnboardingFunction.Arn
+  
+  SysdigSecret:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Description: Sysdig Secure API Token 
+      SecretString:
+        Fn::Join:
+        - ''
+        - - '{"Token":"'
+          - Ref: SysdigSecureAPIToken
+          - '"}'

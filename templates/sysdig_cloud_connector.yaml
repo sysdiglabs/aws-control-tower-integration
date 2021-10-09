@@ -1,0 +1,342 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Cloud Connector for AWS
+Parameters:
+  LogRetention:
+    Type: Number
+    Default: 5
+    Description: Days to keep logs from CloudConnector
+  VPC:
+    Type: AWS::EC2::VPC::Id
+    Description: VPC where the workload is deployed
+  Subnets:
+    Type: List<AWS::EC2::Subnet::Id>
+    Description: Subnets where the CloudConnector will be deployed
+  ECSCluster:
+    Type: String
+    Description: ECS Fargate Cluster where deploy the CloudConnector workload
+  SysdigSecureEndpointSsm:
+    Type: AWS::SSM::Parameter::Name
+    Description: Name of the parameter in SSM containing the Sysdig Secure Endpoint
+      URL
+  SysdigSecureAPITokenSsm:
+    Type: AWS::SSM::Parameter::Name
+    Description: Name of the parameter in SSM containing the Sysdig Secure API Token
+  S3ConfigBucket:
+    Type: String
+    Description: Name of a bucket (must exist) where the configuration YAML files
+      will be stored
+  VerifySSL:
+    Type: String
+    AllowedValues:
+    - 'Yes'
+    - 'No'
+    Default: 'Yes'
+  CloudTrailTopic:
+    Type: String
+    Description: ARN of the SNS Topic to subscribe
+  CloudTrailKMS:
+    Type: String
+    Default: ''
+    Description: ARN of the KMS Key for CloudTrail
+  CallbackSNS:
+    Type: String
+    Description: ARN of the SysdigOnboardingSNS in Log Archive account
+  
+Conditions:
+  VerifySSL:
+    Fn::Equals:
+    - Ref: VerifySSL
+    - 'Yes'
+  EncryptedCloudTrail:
+    Fn::Not:
+    - Fn::Equals:
+      - Ref: CloudTrailKMS
+      - ''
+
+Resources:
+  CloudTrailQueue:
+    Type: AWS::SQS::Queue
+  CloudTrailQueuePolicy:
+    Type: AWS::SQS::QueuePolicy
+    Properties:
+      Queues:
+      - Ref: CloudTrailQueue
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+        - Sid: Allow CloudTrail to send messages
+          Effect: Allow
+          Principal:
+            Service: sns.amazonaws.com
+          Action:
+          - sqs:SendMessage
+          - sqs:SendMessageBatch
+          Resource:
+            Fn::GetAtt:
+            - CloudTrailQueue
+            - Arn
+  Subscription:
+    Type: AWS::SNS::Subscription
+    Properties:
+      Protocol: sqs
+      Endpoint:
+        Fn::GetAtt:
+        - CloudTrailQueue
+        - Arn
+      TopicArn:
+        Ref: CloudTrailTopic
+  LogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName:
+        Ref: AWS::StackName
+      RetentionInDays:
+        Ref: LogRetention
+  AlertsLogStream:
+    Type: AWS::Logs::LogStream
+    Properties:
+      LogGroupName:
+        Ref: LogGroup
+      LogStreamName: alerts
+  TaskRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service:
+            - ecs-tasks.amazonaws.com
+          Action:
+          - sts:AssumeRole
+      Path: /
+      Policies:
+      - PolicyName:
+          Fn::Sub: ${AWS::StackName}-TaskRolePolicy
+        PolicyDocument:
+          Statement:
+          - Effect: Allow
+            Action:
+            - s3:Get*
+            - s3:List*
+            - s3:Put*
+            - s3:Head*
+            - securityhub:GetFindings
+            - securityhub:BatchImportFindings
+            - logs:DescribeLogStreams
+            - logs:GetLogEvents
+            - logs:FilterLogEvents
+            - logs:PutLogEvents
+            - sqs:DeleteMessage
+            - sqs:DeleteMessageBatch
+            - sqs:ReceiveMessage
+            Resource: '*'
+  TaskRoleKMS:
+    Condition: EncryptedCloudTrail
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service:
+            - ecs-tasks.amazonaws.com
+          Action:
+          - sts:AssumeRole
+      Path: /
+      Policies:
+      - PolicyName:
+          Fn::Sub: ${AWS::StackName}-TaskRolePolicy
+        PolicyDocument:
+          Statement:
+          - Effect: Allow
+            Action:
+            - s3:Get*
+            - s3:List*
+            - s3:Put*
+            - s3:Head*
+            - securityhub:GetFindings
+            - securityhub:BatchImportFindings
+            - logs:DescribeLogStreams
+            - logs:GetLogEvents
+            - logs:FilterLogEvents
+            - logs:PutLogEvents
+            - sqs:DeleteMessage
+            - sqs:DeleteMessageBatch
+            - sqs:ReceiveMessage
+            Resource: '*'
+          - Sid: 'DecryptCloudTrailCT'
+            Effect: Allow
+            Action:
+            - kms:Decrypt
+            Resource: 
+              Ref: CloudTrailKMS
+  ExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service:
+            - ecs-tasks.amazonaws.com
+          Action:
+          - sts:AssumeRole
+      Path: /
+      Policies:
+      - PolicyName:
+          Fn::Sub: ${AWS::StackName}-ExecutionRolePolicy
+        PolicyDocument:
+          Statement:
+          - Effect: Allow
+            Action:
+            - logs:CreateLogStream
+            - logs:PutLogEvents
+            Resource: '*'
+      - PolicyName:
+          Fn::Sub: ${AWS::StackName}-TaskReadParameters
+        PolicyDocument:
+          Statement:
+          - Effect: Allow
+            Action:
+            - ssm:GetParameters
+            Resource:
+            - Fn::Sub: arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter/${SysdigSecureEndpointSsm}
+            - Fn::Sub: arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter/${SysdigSecureAPITokenSsm}
+  TaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      RequiresCompatibilities:
+      - FARGATE
+      Family:
+        Fn::Sub: ${AWS::StackName}-CloudConnector
+      NetworkMode: awsvpc
+      TaskRoleArn:
+        !If [ EncryptedCloudTrail, !GetAtt TaskRoleKMS.Arn, !GetAtt TaskRole.Arn]
+      ExecutionRoleArn:
+        Fn::GetAtt:
+        - ExecutionRole
+        - Arn
+      Cpu: '256'
+      Memory: '512'
+      ContainerDefinitions:
+      - Name: Config
+        Environment:
+        - Name: BUCKET
+          Value:
+            Ref: S3ConfigBucket
+        - Name: KEY
+          Value: cloud-connector.yaml
+        - Name: OUTPUT
+          Value: /tmp/cloud-connector.yaml
+        - Name: CONFIG
+          Value:
+            Fn::Base64:
+              Fn::Sub: "rules:\n  - s3:\n      bucket: ${S3ConfigBucket}\n      path:\
+                \ rules\ningestors:\n  - cloudtrail-sns-sqs:\n      queueURL: ${CloudTrailQueue}\n\
+                \      interval: 25s\nnotifiers:\n  - cloudwatch:\n      logGroup:\
+                \ ${LogGroup}\n      logStream: ${AlertsLogStream}\n  #- securityhub:\n\
+                \  #    productArn: arn:aws:securityhub:${AWS::Region}::product/sysdig/sysdig-secure-for-cloud\n"
+        Image: quay.io/sysdig/cloud-connector-s3-bucket-config:latest
+        Essential: false
+        LogConfiguration:
+          LogDriver: awslogs
+          Options:
+            awslogs-group:
+              Ref: LogGroup
+            awslogs-region:
+              Ref: AWS::Region
+            awslogs-stream-prefix: ecs
+      - Name: CloudConnector
+        Environment:
+        - Name: VERIFY_SSL
+          Value:
+            Fn::If:
+            - VerifySSL
+            - 'true'
+            - 'false'
+        - Name: TELEMETRY_DEPLOYMENT_METHOD
+          Value: cft
+        - Name: CONFIG_PATH
+          Value:
+            Fn::Sub: s3://${S3ConfigBucket}/cloud-connector.yaml
+        Secrets:
+        - Name: SECURE_URL
+          ValueFrom:
+            Fn::Sub: arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter/${SysdigSecureEndpointSsm}
+        - Name: SECURE_API_TOKEN
+          ValueFrom:
+            Fn::Sub: arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter/${SysdigSecureAPITokenSsm}
+        DependsOn:
+        - ContainerName: Config
+          Condition: SUCCESS
+        Image: quay.io/sysdig/cloud-connector:latest
+        Essential: true
+        PortMappings:
+        - ContainerPort: 5000
+        LogConfiguration:
+          LogDriver: awslogs
+          Options:
+            awslogs-group:
+              Ref: LogGroup
+            awslogs-region:
+              Ref: AWS::Region
+            awslogs-stream-prefix: ecs
+  SecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      VpcId:
+        Ref: VPC
+      GroupName:
+        Fn::Sub: ${AWS::StackName}-CloudConnector
+      GroupDescription: CloudConnector workload Security Group
+      SecurityGroupIngress:
+      - CidrIp: 0.0.0.0/0
+        IpProtocol: tcp
+        FromPort: 80
+        ToPort: 80
+      - CidrIp: 0.0.0.0/0
+        IpProtocol: tcp
+        FromPort: 443
+        ToPort: 443
+      - CidrIp: 0.0.0.0/0
+        IpProtocol: tcp
+        FromPort: 5000
+        ToPort: 5000
+      Tags:
+      - Key: Name
+        Value:
+          Fn::Sub: ${AWS::StackName}-CloudConnector
+  CloudConnectorService:
+    Type: AWS::ECS::Service
+    Properties:
+      ServiceName:
+        Fn::Sub: ${AWS::StackName}-CloudConnector
+      Cluster:
+        Ref: ECSCluster
+      DesiredCount: 1
+      LaunchType: FARGATE
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          SecurityGroups:
+          - Ref: SecurityGroup
+          Subnets:
+            Ref: Subnets
+      TaskDefinition:
+        Ref: TaskDefinition
+
+  CallbackToOnboarding:
+    Type: "AWS::CloudFormation::CustomResource"
+    Condition: EncryptedCloudTrail
+    DependsOn: TaskRoleKMS
+    Properties:
+      ServiceToken: !Ref CallbackSNS
+      SourceAccount: !Ref 'AWS::AccountId'
+      SourceRegion: !Ref 'AWS::Region'
+      CallBack: True
+      TaskRole: !GetAtt TaskRoleKMS.Arn
+
+Outputs:
+  CloudConnectorECSTaskRole:
+    Description: Sysdig CloudConnector CloudTrail ECS Task Role
+    Value: !If [ EncryptedCloudTrail, !GetAtt TaskRoleKMS.Arn, !GetAtt TaskRole.Arn]

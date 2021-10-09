@@ -1,0 +1,118 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: CodeBuild for performing image scanning with Sysdig Secure
+Parameters:
+  SysdigSecureEndpointSsm:
+    Type: AWS::SSM::Parameter::Name
+    Description: Name of the parameter in SSM containing the Sysdig Secure Endpoint
+      URL
+  SysdigSecureAPITokenSsm:
+    Type: AWS::SSM::Parameter::Name
+    Description: Name of the parameter in SSM containing the Sysdig Secure API Token
+  VerifySSL:
+    Type: String
+    AllowedValues:
+    - 'Yes'
+    - 'No'
+    Default: 'Yes'
+  LogRetention:
+    Type: Number
+    Default: 30
+    Description: Days to keep logs from builds
+Conditions:
+  VerifySSL:
+    Fn::Equals:
+    - Ref: VerifySSL
+    - 'Yes'
+Resources:
+  LogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName:
+        Ref: AWS::StackName
+      RetentionInDays:
+        Ref: LogRetention
+  ServiceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      Description: IAM::Role which allows to run the CodeBuild Job to perform the
+        ECR scanning
+      Path: /
+      Policies:
+      - PolicyName: LogsPublisher
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - Effect: Allow
+            Action:
+            - logs:CreateLogStream
+            - logs:PutLogEvents
+            Resource:
+            - Fn::Sub: arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:${LogGroup}
+            - Fn::Sub: arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:${LogGroup}:*
+      - PolicyName: ParameterReader
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - Effect: Allow
+            Action:
+            - ssm:DescribeParameters
+            - ssm:GetParameter
+            - ssm:GetParameters
+            Resource:
+            - Fn::Sub: arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter/${SysdigSecureEndpointSsm}
+            - Fn::Sub: arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter/${SysdigSecureAPITokenSsm}
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service:
+            - codebuild.amazonaws.com
+          Action:
+          - sts:AssumeRole
+  BuildProject:
+    Type: AWS::CodeBuild::Project
+    Properties:
+      Name:
+        Fn::Sub: ${AWS::StackName}-BuildProject
+      Description: CodeBuild project which scans images using inline technology
+      ServiceRole:
+        Ref: ServiceRole
+      Artifacts:
+        Type: NO_ARTIFACTS
+      Environment:
+        Type: LINUX_CONTAINER
+        ComputeType: BUILD_GENERAL1_MEDIUM
+        Image: aws/codebuild/standard:3.0
+        PrivilegedMode: true
+      LogsConfig:
+        CloudWatchLogs:
+          GroupName:
+            Ref: LogGroup
+          Status: ENABLED
+      Source:
+        Type: NO_SOURCE
+        BuildSpec:
+          Fn::Sub:
+          - "version: 0.2\n\nenv:\n  variables:\n    SCAN_IMAGE_NAME: \"quay.io/sysdig/secure-inline-scan:2\"\
+            \n  parameter-store:\n    SYSDIG_SECURE_ENDPOINT: ${SysdigSecureEndpointSsm}\n\
+            \    SYSDIG_SECURE_TOKEN: ${SysdigSecureAPITokenSsm}\n\nphases:\n  build:\n\
+            \    commands:\n    - |\n      if [ -z \"$REGISTRY_AUTH\" ]; then\n  \
+            \      docker run --rm -e SYSDIG_ADDED_BY=$SYSDIG_ADDED_BY $SCAN_IMAGE_NAME\
+            \ -s $SYSDIG_SECURE_ENDPOINT ${SkipTLSFlag} --sysdig-token $SYSDIG_SECURE_TOKEN\
+            \ $IMAGE_TO_SCAN --annotations=aws-account=$EVENT_ACCOUNT,aws-region=$EVENT_REGION\n\
+            \      else\n        docker run --rm -e SYSDIG_ADDED_BY=$SYSDIG_ADDED_BY\
+            \ $SCAN_IMAGE_NAME -s $SYSDIG_SECURE_ENDPOINT ${SkipTLSFlag} --sysdig-token\
+            \ $SYSDIG_SECURE_TOKEN --registry-auth-basic \"$(echo $REGISTRY_AUTH |\
+            \ base64 -d)\" $IMAGE_TO_SCAN --annotations=aws-account=$EVENT_ACCOUNT,aws-region=$EVENT_REGION\n\
+            \      fi\n"
+          - SkipTLSFlag:
+              Fn::If:
+              - VerifySSL
+              - ''
+              - ' --sysdig-skip-tls'
+Outputs:
+  BuildProject:
+    Description: The name of the CodeBuild project
+    Value:
+      Ref: BuildProject

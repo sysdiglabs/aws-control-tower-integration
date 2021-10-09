@@ -1,0 +1,410 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Sysdig for Cloud - AWS Control Tower Edition
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+    - Label:
+        default: Sysdig Settings
+      Parameters:
+      - SysdigSecureEndpoint
+      - SysdigSecureAPIToken
+    - Label:
+        default: Modules to Deploy
+      Parameters:
+      - CloudBenchDeploy
+      - CloudConnectorDeploy
+      - ECRImageScanningDeploy
+      - ECSImageScanningDeploy
+    - Label:
+        default: AWS Control Tower Config
+      Parameters:
+      - LogArchiveAccount
+      - AuditAccount
+      - CloudTrailKMS
+      - CallbackSNS
+    ParameterLabels:
+    - Label:
+        default: Existing Infrastructure
+      Parameters:
+      - ExistentECSCluster
+      - ExistentECSClusterVPC
+      - ExistentECSClusterPrivateSubnets
+      - ExistentCloudTrailSNSTopic
+    ParameterLabels:
+      SysdigSecureEndpoint:
+        default: Sysdig Secure Endpoint
+      SysdigSecureAPIToken:
+        default: Sysdig Secure API Token
+      CloudBenchDeploy:
+        default: Do you want to deploy Cloud Security Posture Management / Compliance?
+      CloudConnectorDeploy:
+        default: Do you want to deploy Real-Time Threat Investigation based on CloudTrail?
+      ECRImageScanningDeploy:
+        default: Do you want to deploy ECR Image Registry Scanning?
+      ECSImageScanningDeploy:
+        default: Do you want to deploy Fargate Image Scanning?
+      ExistentECSCluster:
+        default: ECS Cluster Name
+      ExistentECSClusterVPC:
+        default: VPC Id
+      ExistentECSClusterPrivateSubnets:
+        default: Private subnet Id's
+      ExistentCloudTrailSNSTopic:
+        default: CloudTrail SNS Topic
+      LogArchiveAccount:
+        default: AWS Control Tower Log Archive Account id
+      AuditAccount:
+        default: AWS Control Tower Audit Account id
+      CloudTrailKMS:
+        default: AWS Control Tower CloudTrail KMS key
+      CallbackSNS:
+        default: AWS Control Tower SysdigOnboardingSNS ARN
+Parameters:
+  CloudBenchDeploy:
+    Type: String
+    AllowedValues:
+    - 'Yes'
+    - 'No'
+    Default: 'Yes'
+  CloudConnectorDeploy:
+    Type: String
+    AllowedValues:
+    - 'Yes'
+    - 'No'
+    Default: 'Yes'
+  ECRImageScanningDeploy:
+    Type: String
+    AllowedValues:
+    - 'Yes'
+    - 'No'
+    Default: 'Yes'
+  ECSImageScanningDeploy:
+    Type: String
+    AllowedValues:
+    - 'Yes'
+    - 'No'
+    Default: 'Yes'
+  ExistentECSCluster:
+    Type: String
+    Default: ''
+    Description: Leave it blank to let us to deploy the infrastructure required for
+      running Sysdig for Cloud
+  ExistentECSClusterVPC:
+    Type: String
+    Default: ''
+    Description: Leave it blank to let us to deploy the infrastructure required for
+      running Sysdig for Cloud
+  ExistentECSClusterPrivateSubnets:
+    Type: List<String>
+    Default: ''
+    Description: Leave it blank to let us to deploy the infrastructure required for
+      running Sysdig for Cloud
+  ExistentCloudTrailSNSTopic:
+    Type: String
+    Default: ''
+    Description: Leave it blank to let us to deploy the infrastructure required for
+      running Sysdig for Cloud
+  SysdigSecureAPIToken:
+    Type: String
+    NoEcho: true
+  SysdigSecureEndpoint:
+    Type: String
+    Default: https://secure.sysdig.com
+  LogArchiveAccount:
+    Type: String
+    Description: AWS Control Tower Log Archive account id
+    AllowedPattern: '[0-9]{12}$'
+    ConstraintDescription: AWS account ID contains only 12 digits numbers
+  AuditAccount:
+    Type: String
+    Description: AWS Control Tower Audit account id
+    AllowedPattern: '[0-9]{12}$'
+    ConstraintDescription: AWS account ID contains only 12 digits numbers
+  CloudTrailKMS:
+    Type: String
+    Default: ''
+    Description: ARN of the KMS Key for CloudTrail
+  CallbackSNS:
+    Type: String
+    Description: ARN of the SysdigOnboardingSNS in Log Archive account
+
+Conditions:
+  RequiresCloudTrail:
+    Fn::Equals:
+    - Ref: ExistentCloudTrailSNSTopic
+    - ''
+  RequiresNewECSCluster:
+    Fn::Or:
+    - Fn::Equals:
+      - Ref: ExistentECSCluster
+      - ''
+    - Fn::Equals:
+      - Ref: ExistentECSClusterVPC
+      - ''
+    - Fn::Equals:
+      - Fn::Join:
+        - ','
+        - Ref: ExistentECSClusterPrivateSubnets
+      - ''
+  LaunchInLogArchiveAccount:
+    Fn::Equals:
+      - Ref: LogArchiveAccount
+      - Ref: AWS::AccountId
+  DeployCloudConnector:
+    Fn::And:
+    - Condition: LaunchInLogArchiveAccount
+    - Fn::Equals:
+      - Ref: CloudConnectorDeploy
+      - 'Yes'
+  DeployCloudBench:
+    Fn::Equals:
+    - Ref: CloudBenchDeploy
+    - 'Yes'
+  DeployCloudScanning:
+    Fn::Or:
+    - Fn::Equals:
+      - Ref: ECRImageScanningDeploy
+      - 'Yes'
+    - Fn::Equals:
+      - Ref: ECSImageScanningDeploy
+      - 'Yes'
+  DeployCloudTrail:
+    Fn::And:
+    - Condition: RequiresCloudTrail
+    - Fn::Or:
+      - Condition: DeployCloudConnector
+      - Condition: DeployCloudScanning
+  DeployNewECSCluster:
+    Fn::And:
+    - Condition: RequiresNewECSCluster
+    - Fn::Or:
+      - Condition: DeployCloudConnector
+      - Condition: DeployCloudScanning
+      - Condition: DeployCloudBench
+  EndpointIsSaas:
+    Fn::Or:
+    - Fn::Equals:
+      - Ref: SysdigSecureEndpoint
+      - https://secure.sysdig.com
+    - Fn::Equals:
+      - Ref: SysdigSecureEndpoint
+      - https://eu1.app.sysdig.com
+    - Fn::Equals:
+      - Ref: SysdigSecureEndpoint
+      - https://us2.app.sysdig.com
+
+Resources:
+  S3ConfigBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    Properties:
+      VersioningConfiguration:
+        Status: Enabled
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      LoggingConfiguration:
+        DestinationBucketName:
+          Ref: SysdigConfigLoggingBucket
+        LogFilePrefix: sysdig-config-bucket-logs
+  SysdigConfigLoggingBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    Properties:
+      AccessControl: LogDeliveryWrite
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+  SysdigSecureAPITokenParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Description: Sysdig Secure API Token
+      Type: String
+      Value:
+        Ref: SysdigSecureAPIToken
+  SysdigSecureEndpointParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Description: Sysdig Secure Endpoint URL
+      Type: String
+      Value:
+        Ref: SysdigSecureEndpoint
+  ECSFargateClusterStack:
+    Type: AWS::CloudFormation::Stack
+    Condition: DeployNewECSCluster
+    Properties:
+      TemplateURL: https://wellsiau-quickstart.s3.amazonaws.com/sysdig/templates/sysdig_ecs_fargate.yaml
+  CloudTrailStack:
+    Type: AWS::CloudFormation::Stack
+    Condition: DeployCloudTrail
+    Properties:
+      TemplateURL: https://wellsiau-quickstart.s3.amazonaws.com/sysdig/templates/sysdig_cloud_connector_cloudtrail.yaml
+  CloudConnectorStack:
+    Type: AWS::CloudFormation::Stack
+    Condition: DeployCloudConnector
+    Properties:
+      TemplateURL: https://wellsiau-quickstart.s3.amazonaws.com/sysdig/templates/sysdig_cloud_connector.yaml
+      Parameters:
+        ECSCluster:
+          Fn::If:
+          - DeployNewECSCluster
+          - Fn::GetAtt:
+            - ECSFargateClusterStack
+            - Outputs.ClusterName
+          - Ref: ExistentECSCluster
+        VPC:
+          Fn::If:
+          - DeployNewECSCluster
+          - Fn::GetAtt:
+            - ECSFargateClusterStack
+            - Outputs.VPC
+          - Ref: ExistentECSClusterVPC
+        Subnets:
+          Fn::If:
+          - DeployNewECSCluster
+          - Fn::GetAtt:
+            - ECSFargateClusterStack
+            - Outputs.PrivateSubnets
+          - Fn::Join:
+            - ','
+            - Ref: ExistentECSClusterPrivateSubnets
+        SysdigSecureEndpointSsm:
+          Ref: SysdigSecureEndpointParameter
+        SysdigSecureAPITokenSsm:
+          Ref: SysdigSecureAPITokenParameter
+        S3ConfigBucket:
+          Ref: S3ConfigBucket
+        VerifySSL:
+          Fn::If:
+          - EndpointIsSaas
+          - 'Yes'
+          - 'No'
+        CloudTrailTopic:
+          Fn::If:
+          - DeployCloudTrail
+          - Fn::GetAtt:
+            - CloudTrailStack
+            - Outputs.Topic
+          - Ref: ExistentCloudTrailSNSTopic
+        CloudTrailKMS: 
+          Ref: CloudTrailKMS
+        CallbackSNS:
+          Ref: CallbackSNS  
+  ScanningCodeBuildStack:
+    Type: AWS::CloudFormation::Stack
+    Condition: DeployCloudScanning
+    Properties:
+      TemplateURL: https://wellsiau-quickstart.s3.amazonaws.com/sysdig/templates/sysdig_cloud_scanning_codebuild.yaml
+      Parameters:
+        SysdigSecureEndpointSsm:
+          Ref: SysdigSecureEndpointParameter
+        SysdigSecureAPITokenSsm:
+          Ref: SysdigSecureAPITokenParameter
+        VerifySSL:
+          Fn::If:
+          - EndpointIsSaas
+          - 'Yes'
+          - 'No'
+  CloudScanningStack:
+    Type: AWS::CloudFormation::Stack
+    Condition: DeployCloudScanning
+    Properties:
+      TemplateURL: https://wellsiau-quickstart.s3.amazonaws.com/sysdig/templates/sysdig_cloud_scanning.yaml
+      Parameters:
+        ECSCluster:
+          Fn::If:
+          - DeployNewECSCluster
+          - Fn::GetAtt:
+            - ECSFargateClusterStack
+            - Outputs.ClusterName
+          - Ref: ExistentECSCluster
+        VPC:
+          Fn::If:
+          - DeployNewECSCluster
+          - Fn::GetAtt:
+            - ECSFargateClusterStack
+            - Outputs.VPC
+          - Ref: ExistentECSClusterVPC
+        Subnets:
+          Fn::If:
+          - DeployNewECSCluster
+          - Fn::GetAtt:
+            - ECSFargateClusterStack
+            - Outputs.PrivateSubnets
+          - Fn::Join:
+            - ','
+            - Ref: ExistentECSClusterPrivateSubnets
+        SysdigSecureEndpointSsm:
+          Ref: SysdigSecureEndpointParameter
+        SysdigSecureAPITokenSsm:
+          Ref: SysdigSecureAPITokenParameter
+        VerifySSL:
+          Fn::If:
+          - EndpointIsSaas
+          - 'Yes'
+          - 'No'
+        ECRDeployed:
+          Ref: ECRImageScanningDeploy
+        ECSDeployed:
+          Ref: ECSImageScanningDeploy
+        BuildProject:
+          Fn::GetAtt:
+          - ScanningCodeBuildStack
+          - Outputs.BuildProject
+        CloudTrailTopic:
+          Fn::If:
+          - DeployCloudTrail
+          - Fn::GetAtt:
+            - CloudTrailStack
+            - Outputs.Topic
+          - Ref: ExistentCloudTrailSNSTopic
+
+  CloudBenchStack:
+    Type: AWS::CloudFormation::Stack
+    Condition: DeployCloudBench
+    Properties:
+      TemplateURL: https://wellsiau-quickstart.s3.amazonaws.com/sysdig/templates/sysdig_cloud_bench.yaml
+      Parameters:
+        ECSCluster:
+          Fn::If:
+          - DeployNewECSCluster
+          - Fn::GetAtt:
+            - ECSFargateClusterStack
+            - Outputs.ClusterName
+          - Ref: ExistentECSCluster
+        VPC:
+          Fn::If:
+          - DeployNewECSCluster
+          - Fn::GetAtt:
+            - ECSFargateClusterStack
+            - Outputs.VPC
+          - Ref: ExistentECSClusterVPC
+        Subnets:
+          Fn::If:
+          - DeployNewECSCluster
+          - Fn::GetAtt:
+            - ECSFargateClusterStack
+            - Outputs.PrivateSubnets
+          - Fn::Join:
+            - ','
+            - Ref: ExistentECSClusterPrivateSubnets
+        SysdigSecureEndpointSsm:
+          Ref: SysdigSecureEndpointParameter
+        SysdigSecureAPITokenSsm:
+          Ref: SysdigSecureAPITokenParameter
+        S3ConfigBucket:
+          Ref: S3ConfigBucket
+        VerifySSL:
+          Fn::If:
+          - EndpointIsSaas
+          - 'Yes'
+          - 'No'
+
+Outputs:
+  CloudConnectorECSTaskRole:
+    Description: Sysdig CloudConnector CloudTrail ECS Task Role
+    Value: !GetAtt CloudConnectorStack.Outputs.CloudConnectorECSTaskRole
