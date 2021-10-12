@@ -354,7 +354,7 @@ def ct_cloudtrail_kms_handler(allowed_role):
         
         # Add KMS key policy
         ct_cloudtrail_stackset_kms = next((item for item in ct_cloudtrail_stackset['StackSet']['Parameters'] if item['ParameterKey'] == 'KMSKeyArn'), False)
-        if ct_cloudtrail_stackset_kms:
+        if ct_cloudtrail_stackset_kms and ct_cloudtrail_stackset_kms['ParameterValue'] != 'NONE':
             ct_cloudtrail_kms_key = ct_cloudtrail_stackset_kms['ParameterValue']
             logger.info('AWS CT CloudTrail KMS Key found: {}'.format(ct_cloudtrail_kms_key))
             

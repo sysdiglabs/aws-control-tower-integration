@@ -74,7 +74,7 @@ Parameters:
     ConstraintDescription: AWS account ID contains only 12 digits numbers
   QSS3BucketName:
     Type: String
-    Default: wellsiau-aws
+    Default: wellsiau-quickstart
     Description: "S3 bucket for all assets. Use this if you want to customize your deployment. The bucket name can include numbers, lowercase letters, uppercase letters, and hyphens, but it cannot start or end with hyphens (-)."
   QSS3KeyPrefix:
     Type: String
