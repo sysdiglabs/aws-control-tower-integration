@@ -60,7 +60,7 @@ Parameters:
     Default: Sysdig-Secure-CT
   StackSetUrl:
     Type: String
-    Default: https://wellsiau-quickstart.s3.amazonaws.com/sysdig/templates/sysdig_ct_stackset.yaml
+    Default: https://cf-templates-cloudvision-controltower.s3.amazonaws.com/sysdig/templates/sysdig_ct_stackset.yaml
     Description: Sysdig Secure CloudConnector StackSet template URL
   AuditAccount:
     Type: String
@@ -74,7 +74,7 @@ Parameters:
     ConstraintDescription: AWS account ID contains only 12 digits numbers
   QSS3BucketName:
     Type: String
-    Default: wellsiau-quickstart
+    Default: cf-templates-cloudvision-controltower
     Description: "S3 bucket for all assets. Use this if you want to customize your deployment. The bucket name can include numbers, lowercase letters, uppercase letters, and hyphens, but it cannot start or end with hyphens (-)."
   QSS3KeyPrefix:
     Type: String
