@@ -22,7 +22,7 @@ Example of the `params.json`:
 [
   {
     "ParameterKey": "SysdigSecureEndpoint",
-    "ParameterValue": "https://us2.app.sysdig.com"
+    "ParameterValue": "CHANGE WITH YOUR SYSDIG ENDPOINT, i.e. https://us2.app.sysdig.com"
   }, 
   {
     "ParameterKey": "SysdigSecureAPIToken",
@@ -34,11 +34,11 @@ Example of the `params.json`:
   },
   {
     "ParameterKey": "StackSetUrl",
-    "ParameterValue": "https://wellsiau-quickstart.s3.amazonaws.com/sysdig/templates/sysdig_ct_stackset.yaml"
+    "ParameterValue": "https://cf-templates-cloudvision-controltower.s3.amazonaws.com/sysdig/templates/sysdig_ct_stackset.yaml"
   },
   {
     "ParameterKey": "QSS3BucketName",
-    "ParameterValue": "wellsiau-quickstart"
+    "ParameterValue": "cf-templates-cloudvision-controltower"
   },
   {
     "ParameterKey": "QSS3KeyPrefix",
@@ -63,5 +63,5 @@ To build this solution:
 - Update the `BUCKET_PREFIX` with your own S3 bucket (require public read)
 - Run `make build`
 - Run `make upload`
-- Launch the onboarding stack: `aws cloudformation create-stack --stack-name Sysdig-CT --template-url https://wellsiau-quickstart.s3.amazonaws.com/sysdig/templates/sysdig_ct_onboarding.yaml --parameters file://params.json --capabilities CAPABILITY_NAMED_IAM`
+- Launch the onboarding stack: `aws cloudformation create-stack --stack-name Sysdig-CT --template-url https://[BUCKET_PREFIX].s3.amazonaws.com/sysdig/templates/sysdig_ct_onboarding.yaml --parameters file://params.json --capabilities CAPABILITY_NAMED_IAM`
 - See reference to `params.json` in the getting started section
