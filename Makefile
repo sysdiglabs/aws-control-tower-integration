@@ -1,4 +1,4 @@
-BUCKET_PREFIX := wellsiau-quickstart
+BUCKET_PREFIX := cf-templates-cloudvision-controltower
 KEY_PREFIX := sysdig
 CFT_PREFIX := templates
 CFT_DIR := templates
