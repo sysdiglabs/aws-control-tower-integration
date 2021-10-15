@@ -4,7 +4,7 @@ Resources:
   VPCStack:
     Type: AWS::CloudFormation::Stack
     Properties:
-      TemplateURL: https://wellsiau-quickstart.s3.amazonaws.com/sysdig/templates/sysdig_ecs_fargate_vpc.yaml
+      TemplateURL: https://cf-templates-cloudvision-controltower.s3.amazonaws.com/sysdig/templates/sysdig_ecs_fargate_vpc.yaml
   ECSCluster:
     Type: AWS::ECS::Cluster
     Properties:
