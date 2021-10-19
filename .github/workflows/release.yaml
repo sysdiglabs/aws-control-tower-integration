@@ -51,14 +51,12 @@ jobs:
         echo ::set-output name=VERSION::$(echo "${{ github.ref }}" | sed -e 's/.*\/v\(.*\)/\1/')
 
     - name: Build and Upload Version
-      run: make ci
       working-directory: ./templates
       env:
         S3_BUCKET: cf-templates-cloudvision-controltower
         S3_PREFIX: sysdig/release/templates/${{ steps.prep.outputs.VERSION }}
 
     - name: Build and Upload Latest
-      run: make ci
       working-directory: ./templates
       env:
         S3_BUCKET: cf-templates-cloudvision-controltower
