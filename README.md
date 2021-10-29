@@ -13,7 +13,7 @@ This solution utilize existing AWS Control Tower infrastructure and centralized 
 Run the following command on your AWS Control Tower management account (requires Admin privilege)
 
 ```
-aws cloudformation create-stack --stack-name Sysdig-CT --template-url https://wellsiau-quickstart.s3.amazonaws.com/sysdig/templates/sysdig_ct_onboarding.yaml --parameters file://params.json --capabilities CAPABILITY_NAMED_IAM
+aws cloudformation create-stack --stack-name Sysdig-CT --template-url https://cf-templates-cloudvision-controltower.s3.amazonaws.com/sysdig/templates/sysdig_ct_onboarding.yaml --parameters file://params.json --capabilities CAPABILITY_NAMED_IAM
 ```
 
 Example of the `params.json`:
