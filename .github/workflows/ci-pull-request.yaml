@@ -1,0 +1,43 @@
+name: CI - Pull Request
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches:
+    - main
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Check out code
+      uses: actions/checkout@v2
+
+    - name: cfn-lint
+      uses: scottbrenner/cfn-lint-action@master
+      with:
+        args: "templates/**/*.yaml"
+
+  build:
+    name: Build and Upload
+    runs-on: ubuntu-latest
+    needs: [lint]
+
+    steps:
+    - name: Check out code
+      uses: actions/checkout@v2
+
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v1
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: eu-east-1
+
+    - name: Build and Upload
+      working-directory: ./templates
+      env:
+        S3_BUCKET: cf-templates-cloudvision-controltower
+        S3_PREFIX: sysdig/pr/templates/${{ github.event.pull_request.head.ref }}
