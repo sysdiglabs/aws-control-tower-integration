@@ -22,7 +22,6 @@ Metadata:
       - AuditAccount
       - CloudTrailKMS
       - CallbackSNS
-    ParameterLabels:
     - Label:
         default: Existing Infrastructure
       Parameters:
