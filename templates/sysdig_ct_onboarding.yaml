@@ -198,7 +198,6 @@ Resources:
     Type: AWS::Lambda::Function
     DependsOn: 
       - CopyZips
-      - SysdigOnboardingSNS
     Properties:
       Code:
         S3Bucket: !Ref LambdaZipsBucket
