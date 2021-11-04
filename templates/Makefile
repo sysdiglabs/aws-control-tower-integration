@@ -30,8 +30,10 @@ lint:
 #		--parameter-overrides \
 #			"SysdigSecureAPIToken=$(SECURE_API_TOKEN)"
 
+ci:
 #ci: packaged-template.yaml
 #	aws s3 cp ./packaged-template.yaml s3://$(S3_BUCKET)/$(S3_PREFIX)/entry-point.yaml
+echo "CI step"
 
 #clean:
 #	aws cloudformation delete-stack --stack-name "Stack Name"
