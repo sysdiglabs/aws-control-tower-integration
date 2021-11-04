@@ -37,6 +37,7 @@ jobs:
         aws-region: eu-east-1
 
     - name: Build and Upload
+      run: make ci
       working-directory: ./templates
       env:
         S3_BUCKET: cf-templates-cloudvision-controltower
