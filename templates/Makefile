@@ -33,7 +33,7 @@ lint:
 #ci: packaged-template.yaml
 #	aws s3 cp ./packaged-template.yaml s3://$(S3_BUCKET)/$(S3_PREFIX)/entry-point.yaml
 ci:
-    echo "CI step"
+	echo "CI step"
 
 #clean:
 #	aws cloudformation delete-stack --stack-name "Stack Name"
