@@ -22,7 +22,6 @@ Metadata:
       - AuditAccount
       - CloudTrailKMS
       - CallbackSNS
-    ParameterLabels:
     - Label:
         default: Existing Infrastructure
       Parameters:
@@ -237,17 +236,17 @@ Resources:
     Type: AWS::CloudFormation::Stack
     Condition: DeployNewECSCluster
     Properties:
-      TemplateURL: https://wellsiau-quickstart.s3.amazonaws.com/sysdig/templates/sysdig_ecs_fargate.yaml
+      TemplateURL: https://cf-templates-cloudvision-controltower.s3.amazonaws.com/sysdig/templates/sysdig_ecs_fargate.yaml
   CloudTrailStack:
     Type: AWS::CloudFormation::Stack
     Condition: DeployCloudTrail
     Properties:
-      TemplateURL: https://wellsiau-quickstart.s3.amazonaws.com/sysdig/templates/sysdig_cloud_connector_cloudtrail.yaml
+      TemplateURL: https://cf-templates-cloudvision-controltower.s3.amazonaws.com/sysdig/templates/sysdig_cloud_connector_cloudtrail.yaml
   CloudConnectorStack:
     Type: AWS::CloudFormation::Stack
     Condition: DeployCloudConnector
     Properties:
-      TemplateURL: https://wellsiau-quickstart.s3.amazonaws.com/sysdig/templates/sysdig_cloud_connector.yaml
+      TemplateURL: https://cf-templates-cloudvision-controltower.s3.amazonaws.com/sysdig/templates/sysdig_cloud_connector.yaml
       Parameters:
         ECSCluster:
           Fn::If:
@@ -298,7 +297,7 @@ Resources:
     Type: AWS::CloudFormation::Stack
     Condition: DeployCloudScanning
     Properties:
-      TemplateURL: https://wellsiau-quickstart.s3.amazonaws.com/sysdig/templates/sysdig_cloud_scanning_codebuild.yaml
+      TemplateURL: https://cf-templates-cloudvision-controltower.s3.amazonaws.com/sysdig/templates/sysdig_cloud_scanning_codebuild.yaml
       Parameters:
         SysdigSecureEndpointSsm:
           Ref: SysdigSecureEndpointParameter
@@ -313,7 +312,7 @@ Resources:
     Type: AWS::CloudFormation::Stack
     Condition: DeployCloudScanning
     Properties:
-      TemplateURL: https://wellsiau-quickstart.s3.amazonaws.com/sysdig/templates/sysdig_cloud_scanning.yaml
+      TemplateURL: https://cf-templates-cloudvision-controltower.s3.amazonaws.com/sysdig/templates/sysdig_cloud_scanning.yaml
       Parameters:
         ECSCluster:
           Fn::If:
@@ -367,7 +366,7 @@ Resources:
     Type: AWS::CloudFormation::Stack
     Condition: DeployCloudBench
     Properties:
-      TemplateURL: https://wellsiau-quickstart.s3.amazonaws.com/sysdig/templates/sysdig_cloud_bench.yaml
+      TemplateURL: https://cf-templates-cloudvision-controltower.s3.amazonaws.com/sysdig/templates/sysdig_cloud_bench.yaml
       Parameters:
         ECSCluster:
           Fn::If:

@@ -328,7 +328,6 @@ Resources:
   CallbackToOnboarding:
     Type: "AWS::CloudFormation::CustomResource"
     Condition: EncryptedCloudTrail
-    DependsOn: TaskRoleKMS
     Properties:
       ServiceToken: !Ref CallbackSNS
       SourceAccount: !Ref 'AWS::AccountId'
