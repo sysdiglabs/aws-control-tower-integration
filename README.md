@@ -4,7 +4,7 @@ This repo provide example of integration for Sysdig CloudConnector (Real-Time Th
 
 ## Architecture
 
-![Architecture Diagram](Sysdig-CT-Arch.png)
+![Architecture Diagram](sysdig-ct-arch.png)
 
 This solution utilize existing AWS Control Tower infrastructure and centralized the CloudTrail log collection in the `log archive` account. CloudTrail logs from existing linked accounts and future vending accounts is automatically ingested.
 
