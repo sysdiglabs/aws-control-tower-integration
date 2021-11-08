@@ -2,6 +2,7 @@
 
 This repo provide example of integration for Sysdig CloudConnector (Real-Time Threat Investigation based on CloudTrail) inside AWS Control Tower environment
 
+
 ## Architecture
 
 ![Architecture Diagram](sysdig-ct-architecture.png)
