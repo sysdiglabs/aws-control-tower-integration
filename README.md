@@ -65,3 +65,10 @@ To build this solution:
 - Run `make upload`
 - Launch the onboarding stack: `aws cloudformation create-stack --stack-name Sysdig-CT --template-url https://[BUCKET_PREFIX].s3.amazonaws.com/sysdig/templates/sysdig_ct_onboarding.yaml --parameters file://params.json --capabilities CAPABILITY_NAMED_IAM`
 - See reference to `params.json` in the getting started section
+
+## Maintenance
+
+### Control Tower solution
+
+### Deployment Pipeline
+- Beta. Pending to review GitHub actions.
