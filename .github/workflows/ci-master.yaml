@@ -22,9 +22,16 @@ jobs:
         aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
         aws-region: us-east-1
 
-    # Rearrange once Makefile is restored
+    # BETA. Rearrange once Makefile is restored
     - name: Build and Upload CFT
       run: aws s3 sync ./templates s3://cf-templates-cloudvision-controltower/sysdig/templates
       env:
         S3_BUCKET: cf-templates-cloudvision-controltower
         S3_PREFIX: sysdig/templates
+
+    # BETA. Rearrange once Makefile is restored
+    - name: Build and Uploa Onboarding package
+      run: aws s3 sync ./functions/packages/onboarding s3://cf-templates-cloudvision-controltower/sysdig/functions/packages/onboarding
+      env:
+        S3_BUCKET: cf-templates-cloudvision-controltower
+        S3_PREFIX: sysdig/functions/packages/onboarding
