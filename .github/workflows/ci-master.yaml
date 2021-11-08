@@ -22,9 +22,9 @@ jobs:
         aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
         aws-region: us-east-1
 
-    - name: Build and Upload
-      run: make ci
-      working-directory: ./templates
+    # Rearrange once Makefile is restored
+    - name: Build and Upload CFT
+      run: aws s3 sync ./templates s3://cf-templates-cloudvision-controltower/sysdig/templates
       env:
         S3_BUCKET: cf-templates-cloudvision-controltower
         S3_PREFIX: sysdig/templates
