@@ -1,3 +1,6 @@
+# :no_entry: This repository is [DEPRECATED] and will be archived. 
+To access to the AWS deployment options please go to the Sysdig documenation for AWS https://docs.sysdig.com/en/docs/installation/sysdig-secure-for-cloud/deploy-sysdig-secure-for-cloud-on-aws/
+
 # Sysdig AWS Control Tower Integration
 
 This repo provide example of integration for Sysdig CloudConnector (Real-Time Threat Investigation based on CloudTrail) inside AWS Control Tower environment.
